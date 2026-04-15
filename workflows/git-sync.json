@@ -1,0 +1,93 @@
+{
+  "updatedAt": "2026-04-15T20:39:59.750Z",
+  "createdAt": "2026-04-15T20:39:59.750Z",
+  "id": "git-sync-trigger",
+  "name": "Git Sync",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.dantam.app/git-sync",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Sync-Token",
+              "value": "ffa7aca419d8c515b4b3166762465684162d2b80"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http",
+      "name": "Push to Git",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Push to Git",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "296abfa6-63b6-485a-af42-f3f59a24425c",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-04-15T20:39:59.759Z",
+      "createdAt": "2026-04-15T20:39:59.759Z",
+      "role": "workflow:owner",
+      "workflowId": "git-sync-trigger",
+      "projectId": "SIvcu6lR7KjGyjEu",
+      "project": {
+        "updatedAt": "2026-04-15T16:09:42.816Z",
+        "createdAt": "2026-04-15T15:45:50.834Z",
+        "id": "SIvcu6lR7KjGyjEu",
+        "name": "Kosmo Tech <tech@kosmodental.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "bcf1e2c7-9f53-4ec1-b535-0d3821b3d8c6"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
