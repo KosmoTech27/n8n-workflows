@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-15T20:39:59.750Z",
+  "updatedAt": "2026-04-17T07:13:27.939Z",
   "createdAt": "2026-04-15T20:39:59.750Z",
   "id": "git-sync-trigger",
   "name": "Git Sync",
@@ -15,7 +15,7 @@
       "typeVersion": 1,
       "position": [
         240,
-        300
+        304
       ]
     },
     {
@@ -38,9 +38,31 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        460,
-        300
+        464,
+        304
       ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        432,
+        160
+      ],
+      "typeVersion": 1,
+      "id": "121cc790-e4cf-4bd5-8037-94d9c16bd756",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        432,
+        160
+      ],
+      "typeVersion": 1,
+      "id": "943064b4-3ea2-4cfb-91b1-3e4317731ea1",
+      "name": "Sticky Note1"
     }
   ],
   "connections": {
@@ -57,17 +79,35 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate"
   },
   "staticData": null,
   "meta": null,
-  "pinData": null,
-  "versionId": "296abfa6-63b6-485a-af42-f3f59a24425c",
+  "pinData": {},
+  "versionId": "c26b4c22-754d-4e81-b73f-1f57c13a2b11",
   "activeVersionId": null,
-  "versionCounter": 1,
+  "versionCounter": 3,
   "triggerCount": 0,
   "tags": [],
   "shared": [
+    {
+      "updatedAt": "2026-04-17T07:09:22.550Z",
+      "createdAt": "2026-04-17T07:09:22.550Z",
+      "role": "workflow:editor",
+      "workflowId": "git-sync-trigger",
+      "projectId": "ICBsKSFtvYE2rS55",
+      "project": {
+        "updatedAt": "2026-04-17T05:02:04.647Z",
+        "createdAt": "2026-04-15T19:03:44.407Z",
+        "id": "ICBsKSFtvYE2rS55",
+        "name": "Kevin P <kevin95.p.v@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "79625365-25f2-4981-94a3-2f85dd4f64cb"
+      }
+    },
     {
       "updatedAt": "2026-04-15T20:39:59.759Z",
       "createdAt": "2026-04-15T20:39:59.759Z",
