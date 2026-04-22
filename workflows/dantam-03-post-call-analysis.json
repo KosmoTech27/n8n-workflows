@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-21T23:47:25.420Z",
+  "updatedAt": "2026-04-22T19:15:06.557Z",
   "createdAt": "2026-04-21T23:42:28.120Z",
   "id": "1RxS6EMR9hS4fExB",
   "name": "Dantam · 03 post-call-analysis",
@@ -108,8 +108,13 @@
         1080,
         300
       ],
-      "continueOnFail": true,
-      "disabled": true
+      "credentials": {
+        "openAiApi": {
+          "id": "PcfQWFhLhQndcWqG",
+          "name": "Dantam OpenAI"
+        }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -236,9 +241,9 @@
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "88b95c2a-6a58-4c60-b313-6fe6aa6a832f",
-  "activeVersionId": "88b95c2a-6a58-4c60-b313-6fe6aa6a832f",
-  "versionCounter": 10,
+  "versionId": "13d00b19-bb0b-45ba-bd81-24ffddd4b138",
+  "activeVersionId": "13d00b19-bb0b-45ba-bd81-24ffddd4b138",
+  "versionCounter": 20,
   "triggerCount": 1,
   "tags": [],
   "shared": [
