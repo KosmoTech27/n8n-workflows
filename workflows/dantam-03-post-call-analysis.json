@@ -1,0 +1,267 @@
+{
+  "updatedAt": "2026-04-21T23:47:25.420Z",
+  "createdAt": "2026-04-21T23:42:28.120Z",
+  "id": "1RxS6EMR9hS4fExB",
+  "name": "Dantam · 03 post-call-analysis",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dantam-post-call-analysis",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "dantam-post-call-analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.body || $input.first().json;\nconst getFirst = (...names) => {\n  for (const n of names) {\n    const v = n.split('.').reduce((acc,k) => (acc && acc[k] !== undefined) ? acc[k] : undefined, raw);\n    if (v !== undefined && v !== null && v !== '') return v;\n  }\n  return '';\n};\nconst callId = getFirst('call_id','execution_id','id','context_details.call_id');\nconst startedAt = getFirst('started_at','call_started_at','conversation_started_at');\nconst endedAt = getFirst('ended_at','call_ended_at','conversation_ended_at');\nconst callerNumber = getFirst('from_number','caller_number','customer_number','context_details.from_number');\nconst transcript = (() => {\n  const t = getFirst('transcript','conversation','messages');\n  if (Array.isArray(t)) return t.map(m => `${m.role||''}: ${m.content||m.text||''}`).join('\\n');\n  return String(t||'');\n})();\nconst recording = getFirst('recording_url','telephony_data.recording_url','call_recording');\nreturn [{ json: {\n  call_id: String(callId||''),\n  started_at: String(startedAt||''),\n  ended_at: String(endedAt||''),\n  caller_number: String(callerNumber||''),\n  transcript,\n  recording_url: String(recording||''),\n  raw_payload_json: JSON.stringify(raw),\n  sheet_id: '1xvbM37zAPLflfjLn66tWv0jGiFpSrrBILM-drdW0Da0'\n}}];"
+      },
+      "id": "normalise",
+      "name": "Normalise payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $json.sheet_id }}/values/Appointments",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "options": {}
+      },
+      "id": "read-appts",
+      "name": "Read Appointments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "ASzktPf9mJWxjQc7",
+          "name": "Dantam Google SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const n = $('Normalise payload').item.json;\nconst data = $input.first().json;\nconst rows = data.values || [];\nconst header = rows[0] || [];\nconst idx = {};\nheader.forEach((h,i) => { idx[h] = i; });\nconst match = rows.slice(1).find(r => r[idx['call_id']] === n.call_id);\nlet booking = {};\nif (match) {\n  booking = {\n    calendar_event_id: match[idx['calendar_event_id']] || '',\n    appointment_time: match[idx['start_iso']] || '',\n    service: match[idx['service']] || '',\n    caller_name: match[idx['patient_name']] || '',\n    appointment_booked: true\n  };\n}\nreturn [{ json: Object.assign({}, n, booking) }];"
+      },
+      "id": "merge-booking",
+      "name": "Merge booking info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You analyse a dental clinic phone call transcript. Return STRICT JSON only (no markdown) with keys: summary (2-3 factual sentences), intent (one of: booking, reschedule, cancel, info, complaint, other), sentiment (one of: positive, neutral, negative), follow_up_needed (boolean), follow_up_reason (short string or empty)."
+            },
+            {
+              "role": "user",
+              "content": "=Transcript:\n{{ $json.transcript || '(empty transcript)' }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "llm",
+      "name": "LLM analyse",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1080,
+        300
+      ],
+      "continueOnFail": true,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nlet text = (item.message && item.message.content) ? item.message.content : (item.output || item.text || item.content || '');\nif (typeof text !== 'string') text = JSON.stringify(text);\nlet parsed = {};\ntry { parsed = JSON.parse(text); } catch(_) {\n  const m = text.match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { parsed = JSON.parse(m[0]); } catch(_) {} }\n}\nconst merged = $('Merge booking info').item.json;\nreturn [{ json: Object.assign({}, merged, {\n  summary: parsed.summary || '',\n  intent: parsed.intent || (merged.appointment_booked ? 'booking' : 'other'),\n  sentiment: parsed.sentiment || 'neutral',\n  follow_up_needed: !!parsed.follow_up_needed,\n  follow_up_reason: parsed.follow_up_reason || ''\n})}];"
+      },
+      "id": "parse-llm",
+      "name": "Parse LLM JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $json.sheet_id }}/values/Calls:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[\n  $json.call_id,\n  $json.started_at,\n  $json.ended_at,\n  $json.caller_number,\n  $json.caller_name || '',\n  $json.intent,\n  $json.service || '',\n  $json.appointment_time || '',\n  $json.appointment_booked ? 'TRUE' : 'FALSE',\n  $json.calendar_event_id || '',\n  $json.transcript,\n  $json.summary,\n  $json.sentiment,\n  $json.follow_up_needed ? 'TRUE' : 'FALSE',\n  $json.follow_up_reason,\n  $json.recording_url,\n  $json.raw_payload_json\n]] }) }}",
+        "options": {}
+      },
+      "id": "append-call",
+      "name": "Append Calls row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "ASzktPf9mJWxjQc7",
+          "name": "Dantam Google SA"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalise payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise payload": {
+      "main": [
+        [
+          {
+            "node": "Read Appointments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointments": {
+      "main": [
+        [
+          {
+            "node": "Merge booking info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge booking info": {
+      "main": [
+        [
+          {
+            "node": "LLM analyse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM analyse": {
+      "main": [
+        [
+          {
+            "node": "Parse LLM JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse LLM JSON": {
+      "main": [
+        [
+          {
+            "node": "Append Calls row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "88b95c2a-6a58-4c60-b313-6fe6aa6a832f",
+  "activeVersionId": "88b95c2a-6a58-4c60-b313-6fe6aa6a832f",
+  "versionCounter": 10,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-04-21T23:42:28.125Z",
+      "createdAt": "2026-04-21T23:42:28.125Z",
+      "role": "workflow:owner",
+      "workflowId": "1RxS6EMR9hS4fExB",
+      "projectId": "Rki4gBdKsVqmGXla",
+      "project": {
+        "updatedAt": "2026-04-16T08:13:17.711Z",
+        "createdAt": "2026-04-15T20:00:26.480Z",
+        "id": "Rki4gBdKsVqmGXla",
+        "name": "OPERANDUS AI <operandus.work@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "c3ddafce-ba9a-43fd-b1af-fbeca72372ad"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

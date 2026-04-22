@@ -1,0 +1,378 @@
+{
+  "updatedAt": "2026-04-21T23:47:24.906Z",
+  "createdAt": "2026-04-21T23:42:27.135Z",
+  "id": "ad2sdPUhsDMSkLIW",
+  "name": "Dantam · 02 book-appointment",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dantam-book-appointment",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "dantam-book-appointment"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst start = new Date(body.start_iso);\nif (isNaN(start.getTime())) return [{ json: { error:'bad_iso', got: body.start_iso } }];\nconst duration = parseInt(body.duration_minutes || '30', 10);\nconst end = new Date(start.getTime() + duration*60000);\nconst bufferMin = 10;\nconst windowStart = new Date(start.getTime() - bufferMin*60000).toISOString();\nconst windowEnd = new Date(end.getTime() + bufferMin*60000).toISOString();\nconst calId = '9e31eddd03011a49802170cdb7228dd24099675b0bd216060ba080d93e714e42@group.calendar.google.com';\nconst sheetId = '1xvbM37zAPLflfjLn66tWv0jGiFpSrrBILM-drdW0Da0';\nreturn [{ json: {\n  call_id: body.call_id || '',\n  caller_name: body.caller_name || '',\n  caller_phone: body.caller_phone || '',\n  service: body.service || 'Consultation',\n  notes: body.notes || '',\n  start_iso: start.toISOString(),\n  end_iso: end.toISOString(),\n  duration_minutes: duration,\n  window_start: windowStart,\n  window_end: windowEnd,\n  cal_id: calId,\n  sheet_id: sheetId\n}}];"
+      },
+      "id": "parse",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/freeBusy",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ timeMin: $json.window_start, timeMax: $json.window_end, items:[{id: $json.cal_id}] }) }}",
+        "options": {}
+      },
+      "id": "freebusy",
+      "name": "FreeBusy recheck",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        300
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "ASzktPf9mJWxjQc7",
+          "name": "Dantam Google SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Parse Input').item.json;\nconst fb = $input.first().json;\nconst cal = (fb.calendars || {})[p.cal_id] || {};\nconst busy = cal.busy || [];\nreturn [{ json: Object.assign({}, p, { still_free: busy.length === 0 }) }];"
+      },
+      "id": "decide",
+      "name": "Check availability",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.still_free }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-free",
+      "name": "Still free?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1080,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://www.googleapis.com/calendar/v3/calendars/{{ encodeURIComponent($json.cal_id) }}/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ summary: $json.service + ' – ' + $json.caller_name, description: 'Phone: ' + $json.caller_phone + '\\nNotes: ' + $json.notes + '\\nCall ID: ' + $json.call_id, start: { dateTime: $json.start_iso, timeZone: 'Asia/Kolkata' }, end: { dateTime: $json.end_iso, timeZone: 'Asia/Kolkata' } }) }}",
+        "options": {}
+      },
+      "id": "create-event",
+      "name": "Create Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        200
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "ASzktPf9mJWxjQc7",
+          "name": "Dantam Google SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $('Parse Input').item.json.sheet_id }}/values/Appointments:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.id, $('Parse Input').item.json.call_id, $('Parse Input').item.json.caller_name, $('Parse Input').item.json.caller_phone, $('Parse Input').item.json.service, $('Parse Input').item.json.start_iso, $('Parse Input').item.json.end_iso, $('Parse Input').item.json.duration_minutes, $('Parse Input').item.json.notes, $now.toISO() ]] }) }}",
+        "options": {}
+      },
+      "id": "append-appt",
+      "name": "Append Appointment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        200
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "ASzktPf9mJWxjQc7",
+          "name": "Dantam Google SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Parse Input').item.json;\nconst ev = $('Create Event').item.json;\nconst d = new Date(p.start_iso);\nconst opts = { timeZone:'Asia/Kolkata', weekday:'long', month:'long', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true };\nconst whenSpoken = new Intl.DateTimeFormat('en-IN', opts).format(d);\nconst code = (ev.id || '').slice(-6).toUpperCase();\nreturn [{ json: { booked:true, confirmation_code: code, when_spoken: whenSpoken, calendar_event_id: ev.id, call_id: p.call_id } }];"
+      },
+      "id": "format-ok",
+      "name": "Format success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Parse Input').item.json;\nreturn [{ json: { booked:false, reason:'slot_no_longer_available', requested_slot: p.start_iso, call_id: p.call_id } }];"
+      },
+      "id": "format-fail",
+      "name": "Format busy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        1960,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "FreeBusy recheck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FreeBusy recheck": {
+      "main": [
+        [
+          {
+            "node": "Check availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check availability": {
+      "main": [
+        [
+          {
+            "node": "Still free?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still free?": {
+      "main": [
+        [
+          {
+            "node": "Create Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format busy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Event": {
+      "main": [
+        [
+          {
+            "node": "Append Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Appointment": {
+      "main": [
+        [
+          {
+            "node": "Format success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format success": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format busy": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "5e7bd725-cb14-4f32-a3ff-3da2d5af91f5",
+  "activeVersionId": "5e7bd725-cb14-4f32-a3ff-3da2d5af91f5",
+  "versionCounter": 14,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-04-21T23:42:27.140Z",
+      "createdAt": "2026-04-21T23:42:27.140Z",
+      "role": "workflow:owner",
+      "workflowId": "ad2sdPUhsDMSkLIW",
+      "projectId": "Rki4gBdKsVqmGXla",
+      "project": {
+        "updatedAt": "2026-04-16T08:13:17.711Z",
+        "createdAt": "2026-04-15T20:00:26.480Z",
+        "id": "Rki4gBdKsVqmGXla",
+        "name": "OPERANDUS AI <operandus.work@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "c3ddafce-ba9a-43fd-b1af-fbeca72372ad"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

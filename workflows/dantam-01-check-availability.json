@@ -1,0 +1,262 @@
+{
+  "updatedAt": "2026-04-21T23:47:24.589Z",
+  "createdAt": "2026-04-21T23:39:56.058Z",
+  "id": "dKBA9KzPZtgRvYCa",
+  "name": "Dantam · 01 check-availability",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dantam-check-availability",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "dantam-check-availability"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst tz = 'Asia/Kolkata';\nconst requested = body.requested_datetime_iso || body.requested_datetime || '';\nconst duration = parseInt(body.duration_minutes || '30', 10);\nconst service = body.service || 'Consultation';\nconst callId = body.call_id || '';\nconst bufferMin = 10;\nif (!requested) return [{ json: { error:'missing_requested_datetime' } }];\nconst start = new Date(requested);\nif (isNaN(start.getTime())) return [{ json: { error:'bad_iso', got: requested } }];\nconst end = new Date(start.getTime() + duration*60000);\nconst dtf = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday:'short', hour:'numeric', minute:'numeric', hour12:false });\nconst parts = Object.fromEntries(dtf.formatToParts(start).map(p => [p.type, p.value]));\nconst weekday = parts.weekday;\nconst hourMin = parseInt(parts.hour,10)*60 + parseInt(parts.minute,10);\nconst isSunday = weekday === 'Sun';\nconst outsideHours = isSunday || hourMin < 10*60 || (hourMin + duration) > 19*60;\nconst windowStart = new Date(start.getTime() - bufferMin*60000).toISOString();\nconst windowEnd = new Date(end.getTime() + bufferMin*60000).toISOString();\nconst calId = '9e31eddd03011a49802170cdb7228dd24099675b0bd216060ba080d93e714e42@group.calendar.google.com';\nreturn [{ json: { call_id: callId, service, duration, requested_iso: start.toISOString(), end_iso: end.toISOString(), window_start: windowStart, window_end: windowEnd, weekday, outside_hours: outsideHours, cal_id: calId } }];"
+      },
+      "id": "parse",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.outside_hours }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-outside",
+      "name": "Outside hours?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/freeBusy",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ timeMin: $json.window_start, timeMax: $json.window_end, items: [{ id: $json.cal_id }] }) }}",
+        "options": {}
+      },
+      "id": "freebusy",
+      "name": "FreeBusy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        420
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "ASzktPf9mJWxjQc7",
+          "name": "Dantam Google SA"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Parse Input').item.json;\nconst fb = $input.first().json;\nconst cal = (fb.calendars || {})[p.cal_id] || {};\nconst busy = cal.busy || [];\nconst isFree = busy.length === 0;\nif (isFree) {\n  return [{ json: { available: true, requested_slot: p.requested_iso, duration_minutes: p.duration, service: p.service, call_id: p.call_id, alternatives: [] } }];\n}\nconst tz = 'Asia/Kolkata';\nconst dtf = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday:'short', hour:'numeric', minute:'numeric', hour12:false });\nfunction inHours(date, d) {\n  const parts = Object.fromEntries(dtf.formatToParts(date).map(x => [x.type, x.value]));\n  if (parts.weekday === 'Sun') return false;\n  const m = parseInt(parts.hour,10)*60 + parseInt(parts.minute,10);\n  return m >= 10*60 && (m+d) <= 19*60;\n}\nconst alts = [];\nlet probe = new Date(p.requested_iso);\nfor (let i=1; i<=48 && alts.length < 3; i++) {\n  probe = new Date(probe.getTime() + 30*60000);\n  if (!inHours(probe, p.duration)) continue;\n  alts.push(probe.toISOString());\n}\nreturn [{ json: { available: false, requested_slot: p.requested_iso, duration_minutes: p.duration, service: p.service, call_id: p.call_id, alternatives: alts, reason: 'busy' } }];"
+      },
+      "id": "compute",
+      "name": "Compute response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Parse Input').item.json;\nconst tz = 'Asia/Kolkata';\nconst dtf = new Intl.DateTimeFormat('en-GB', { timeZone: tz, weekday:'short', hour:'numeric', minute:'numeric', hour12:false });\nfunction inHours(date, d) {\n  const parts = Object.fromEntries(dtf.formatToParts(date).map(x => [x.type, x.value]));\n  if (parts.weekday === 'Sun') return false;\n  const m = parseInt(parts.hour,10)*60 + parseInt(parts.minute,10);\n  return m >= 10*60 && (m+d) <= 19*60;\n}\nconst alts = [];\nlet probe = new Date(p.requested_iso);\nfor (let i=1; i<=200 && alts.length < 3; i++) {\n  probe = new Date(probe.getTime() + 30*60000);\n  if (!inHours(probe, p.duration)) continue;\n  alts.push(probe.toISOString());\n}\nreturn [{ json: { available: false, requested_slot: p.requested_iso, duration_minutes: p.duration, service: p.service, call_id: p.call_id, alternatives: alts, reason: 'outside_hours' } }];"
+      },
+      "id": "outside-alts",
+      "name": "Outside-hours alts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [
+        1300,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "Outside hours?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outside hours?": {
+      "main": [
+        [
+          {
+            "node": "Outside-hours alts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FreeBusy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FreeBusy": {
+      "main": [
+        [
+          {
+            "node": "Compute response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute response": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outside-hours alts": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "e75e7852-372a-4524-8fc5-a41ba0f28375",
+  "activeVersionId": "e75e7852-372a-4524-8fc5-a41ba0f28375",
+  "versionCounter": 15,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-04-21T23:39:56.064Z",
+      "createdAt": "2026-04-21T23:39:56.064Z",
+      "role": "workflow:owner",
+      "workflowId": "dKBA9KzPZtgRvYCa",
+      "projectId": "Rki4gBdKsVqmGXla",
+      "project": {
+        "updatedAt": "2026-04-16T08:13:17.711Z",
+        "createdAt": "2026-04-15T20:00:26.480Z",
+        "id": "Rki4gBdKsVqmGXla",
+        "name": "OPERANDUS AI <operandus.work@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "c3ddafce-ba9a-43fd-b1af-fbeca72372ad"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
